@@ -1,0 +1,27 @@
+# Managed by nicerobot/tools.repository (distribute-build)
+name: docs
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "50 11 * * 5"
+  workflow_dispatch:
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  docs:
+    # A scheduled run re-lints against the floating ci/docs@v2 image with no push;
+    # distribute substitutes the per-repo cron above. Skip forks (no-op for push/PR).
+    if: github.event_name != 'schedule' || github.event.repository.fork == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: nicerobot/tools.build/ci/docs@v2

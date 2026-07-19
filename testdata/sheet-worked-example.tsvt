@@ -1,0 +1,11 @@
+=header(1)
+E1	E	F	G	Sum
+
+=body
+*	=C + D	=min(A0:A1) + sum(B1:B2) * E
+G=IF(A,C$3,D$3)
+
+=final
+=A<  # insert a column before column A
+A$+1=Total
+I$=sum($B$1:$F$-1)

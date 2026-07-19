@@ -1,0 +1,11 @@
+# tsvsheet
+
+> **A spreadsheet for plain text.** A `.tsvt` file _is_ the spreadsheet — a single TAB-separated grid whose cells are literal values or `=formulas` that address other cells in A1 notation (`B2`, `D2:D5`), computed in place, versioned as text, diffed line by line.
+>
+> **Model correction (2026-07-14).** An earlier draft misread the 2011 `csvsheet` source as a _two-file worksheet_ (a `.tsv` value grid + a `.tsvt` template of `=header`/`=body`/`=final` sections, structural modifiers, and row-relative references). It is not: a `.tsvt` is one grid of cells like a conventional spreadsheet. [SPECIFICATION.md](SPECIFICATION.md) is the corrected single-file A1 model, and [tsvsheet/tsvsheet.go](https://github.com/tsvsheet/tsvsheet.go) implements it. The grammar has been **narrowed to the A1 language**: the formula expression sublanguage with Excel-faithful operators (`^`, `&`, postfix `%`, `TRUE`/`FALSE` and error-value literals) over A1 cell and range references; the legacy worksheet/section/modifier forms are pruned.
+
+Grammar-first, exactly like [isnow](../isnow) and [up.grammar](../up.grammar): [TsvsheetLexer.g4](TsvsheetLexer.g4) + [TsvsheetParser.g4](TsvsheetParser.g4) are the source of truth; every implementation is generated from them (`make gen`). The grammar defines the formula expression sublanguage (the grid — lines, TABs, literal cells — is plain TSV split by the host, not parsed); the computation model (A1 reference resolution, dependency-ordered evaluation, `#REF!`/`#CIRC!` propagation) is **semantic**, layered by an implementation over the parse tree ([SPECIFICATION.md](SPECIFICATION.md) §7). Adding wrapper logic that the grammar could express is a language-design alarm — push it into the grammar.
+
+- The single-file A1 spreadsheet model, the cell/reference forms, and what is in vs out of scope are fixed in [SPECIFICATION.md](SPECIFICATION.md). Items marked **[open]** were underspecified in the 2011 source and are recorded as open questions, never filled by invention.
+- A `.tsvt` is the whole spreadsheet — one grid of literal and `=formula` cells; there is no separate data file.
+- The ANTLR/Java toolchain is Docker-isolated ([docker/antlr](docker/antlr/Dockerfile)); generated parsers are never committed here (`gen/` is ignored) — they are lifted into implementation repos.

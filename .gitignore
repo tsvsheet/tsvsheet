@@ -1,0 +1,6 @@
+# ANTLR auxiliary artifacts (regenerated; never committed)
+*.interp
+*.tokens
+
+# Generated parsers — lifted into implementation repos, not committed here
+/gen/
