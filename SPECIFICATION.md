@@ -94,6 +94,57 @@ An unknown function name computes to `#NAME?` (§6) and is flagged by a static c
 
 There is **no pipe at evaluation**. A processor normalizes the pipe to its equivalent call when it builds the expression, so the §7 computation model — dependency graph, memoization, error propagation — is unchanged and there is exactly one execution path: function application. An error value piped into a call propagates exactly as it would as an argument (§6). The two spellings are the same formula; a processor that re-emits formula text (a trace, a structural edit) preserves the author's spelling.
 
+### 5.5 Beyond-spreadsheet function families
+
+A **dated extension (2026-07-19)**, absent from the source: five pure, always-available function families that extend the semantic set of §5.3 — every one an ordinary call under the §5.3 syntax (names put digits only at a name's tail, e.g. `sha256`, `unbase64`), computing deterministically from its arguments with no I/O, no clock, and no configuration. A result listed as a _column_ spills vertically from the formula's cell like an imported column (§9); a spill blocked by an occupied cell is `#SPILL!`.
+
+**Timeseries** — the range is read row-major as a dense numeric series (an empty or non-numeric element is `#VALUE!`); the result is a column the same length.
+
+| Function | Result |
+| --- | --- |
+| `movingavg(range, n)` `rollingmin(range, n)` `rollingmax(range, n)` | the trailing-window mean/min/max; positions with fewer than `n` values are `#N/A`; `n` truncates to an integer, and `n < 1` is `#NUM!` |
+| `ema(range, n)` | exponential moving average, smoothing `2/(n+1)`, seeded with the first element — defined at every position |
+| `cumsum(range)` | the running total |
+
+**JSON** — pure parsing of a text argument; no fetching. A path is dotted keys with bracketed indices (`a.b[0].c`; `""` is the root); malformed JSON or a malformed path is `#VALUE!`, and a path that does not resolve is `#N/A`.
+
+| Function | Result |
+| --- | --- |
+| `jsonget(x, path)` | the value at the path: JSON string/number/boolean/null map to text/number/boolean/empty; an object or array yields its compact JSON text |
+| `jsonset(x, path, value)` | the document's compact text with the path set — member order and number literals are preserved, a new key appends, a missing object key along the path is created, and an index past an array's last element is `#N/A` |
+| `jsonkeys(x)` / `jsonkeys(x, path)` | an object's keys in document order, as a column; an empty object is `#N/A`, a non-object `#VALUE!` |
+| `jsonlen(x)` / `jsonlen(x, path)` | an array's element count or an object's member count; a scalar is `#VALUE!` |
+| `jsontype(x)` / `jsontype(x, path)` | `"null"` `"boolean"` `"number"` `"string"` `"array"` or `"object"` |
+
+**URL** — component extraction requires an absolute URL (`#VALUE!` otherwise).
+
+| Function | Result |
+| --- | --- |
+| `urlscheme(x)` `urlhost(x)` `urlpath(x)` `urlfragment(x)` | the scheme; the host (without any port); the decoded path; the decoded fragment |
+| `urlquery(x, key)` | the first value of the query parameter; `#N/A` when absent, `#VALUE!` for a malformed query string |
+| `urlencode(x)` | RFC 3986 percent-encoding — every byte outside the unreserved set, space as `%20`, never `+` |
+| `urldecode(x)` | reverses `%XX` sequences only (`+` stays `+`); malformed input is `#VALUE!` |
+
+**Email** — syntactic validity only; a processor never performs DNS lookups.
+
+| Function | Result |
+| --- | --- |
+| `emailvalid(x)` | `TRUE`/`FALSE` — is `x` a bare, syntactically valid address (no display name) |
+| `emailuser(x)` `emaildomain(x)` | the local part / the domain, split at the last `@`; an invalid address is `#VALUE!` |
+
+**Crypto** — digests and verification only. A digest of a scalar is over the UTF-8 bytes of its text form; a digest of a range is over the range's **canonical serialization**: each row's computed cell texts joined by a single TAB, every row terminated by a single LF (the last row included). Signing and encryption are deliberately absent — a formula never consumes a secret.
+
+| Function | Result |
+| --- | --- |
+| `sha256(x)` `sha512(x)` | lowercase hex digest |
+| `crc32(x)` | IEEE CRC-32, 8 lowercase hex digits (a checksum, not cryptographic) |
+| `digest(range)` / `digest(range, algo)` | digest of the canonical serialization; `algo` is `sha256` (default), `sha512`, or `crc32`, case-insensitive — anything else is `#VALUE!` |
+| `hmac(key, x)` / `hmac(key, x, algo)` | keyed digest in lowercase hex; `algo` is `sha256` (default) or `sha512` |
+| `verify(signature, pubkey, range)` | `TRUE`/`FALSE` — does the hex Ed25519 `signature` (64 bytes) verify over the range's canonical serialization under the hex `pubkey` (32 bytes); undecodable or wrong-length inputs are `#VALUE!` |
+| `base64(x)` / `unbase64(x)` | standard padded Base64 encode/decode of the text form; `unhex(x)` reverses `hex(x)` likewise — a decoder given malformed or non-UTF-8 input is `#VALUE!` |
+
+A `digest(range)` cell makes a sheet **tamper-evident** — recompute and compare — and a `verify(…)` cell makes it **self-verifying**: a bottom row that proves the rows above it are untouched, in plain text, under version control.
+
 ## 6. Values and error values
 
 A computed cell is a **number**, **text**, or one of the **error values**, which propagate through any expression that reads them:
@@ -105,6 +156,9 @@ A computed cell is a **number**, **text**, or one of the **error values**, which
 | `#CIRC!` | a formula participates in a reference cycle, within a sheet or across embedded sheets (§8) |
 | `#VALUE!` | an operation receives an operand of the wrong kind |
 | `#NAME?` | a call names an unknown function |
+| `#N/A` | a lookup or path does not resolve, or a windowed position has no full window (§5.5) |
+| `#NUM!` | a numeric argument is outside a function's domain |
+| `#SPILL!` | a result that spills (§5.5, §9) is blocked by an occupied cell |
 | `#IMPORT!` | an `IMPORT*` fetch fails or its response is refused (§9) |
 
 A literal cell already holding one of these strings round-trips as that error value.
@@ -206,4 +260,4 @@ Each `Average` cell reads its row's three scores; each `Result` cell reads the `
 
 ## 12. Provenance
 
-Derived from `csvsheet` (working draft 2011-03-07), a single-file spreadsheet whose cells held values or formulas over comma-separated rows. This capture corrects an intervening draft that reinterpreted it as a two-file "worksheet" with data and a sectioned template kept apart — a reading the design does not support. Changes from the source: the TSV delimiter (eliminating the CSV formula-quoting rule), A1 references in place of the ad-hoc reference notation, an explicit dependency-graph computation model (§7), and the formula expression language (§5), which the source only exemplified. Items marked **[open]** reflect gaps left unfilled by invention. The pipe operator (§5.4) is a dated extension (2026-07-17): pure syntax over §5.3 function calls, absent from the source.
+Derived from `csvsheet` (working draft 2011-03-07), a single-file spreadsheet whose cells held values or formulas over comma-separated rows. This capture corrects an intervening draft that reinterpreted it as a two-file "worksheet" with data and a sectioned template kept apart — a reading the design does not support. Changes from the source: the TSV delimiter (eliminating the CSV formula-quoting rule), A1 references in place of the ad-hoc reference notation, an explicit dependency-graph computation model (§7), and the formula expression language (§5), which the source only exemplified. Items marked **[open]** reflect gaps left unfilled by invention. The pipe operator (§5.4) is a dated extension (2026-07-17): pure syntax over §5.3 function calls, absent from the source. The beyond-spreadsheet function families (§5.5) are a dated extension (2026-07-19): pure semantics over the §5.3 call form — timeseries windows, JSON, URL, email, and digest/verification functions — absent from the source.
