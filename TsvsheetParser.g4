@@ -33,8 +33,9 @@ options { tokenVocab=TsvsheetLexer; }
 // The pipe is PURE SUGAR over a function call (§5.4): `x | f(a)` is exactly
 // `f(x, a)` — an implementation normalizes it at expression build, so
 // evaluation only ever sees function application. The right-hand side is a
-// functionCall, never a general expression: that keeps the chain unambiguous
-// and makes `x | wc` (no parentheses) a syntax error by construction.
+// functionCall, never a general expression, which keeps the chain unambiguous;
+// a stage may drop empty parentheses (`x | sort`), the piped value being its
+// sole argument.
 expression
     : LPAREN expression RPAREN                               # parenExpr
     | expression PERCENT                                     # percentExpr
@@ -55,8 +56,13 @@ expression
 
 // A call: `name( arg, … )`. The name is a NAME (`sum`) or an all-caps COL
 // (`IF`), optionally with a trailing digit group so digit-bearing names lex
-// correctly (`atan2`, `log10`) despite NAME/COL being letters-only.
-functionCall : (NAME | COL) NUMBER? LPAREN argList? RPAREN ;
+// correctly (`atan2`, `log10`) despite NAME/COL being letters-only. A nullary
+// call may drop its empty parentheses (`pi`, `now`) — the bare form carries no
+// digit group, so `A1` stays a cell reference, never a call named `A`.
+functionCall
+    : (NAME | COL) NUMBER? LPAREN argList? RPAREN
+    | (NAME | COL)
+    ;
 
 argList : expression (COMMA expression)* ;
 
