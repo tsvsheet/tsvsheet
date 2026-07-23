@@ -5,18 +5,21 @@
 # source of truth.
 #
 # TsvsheetLexer.g4 + TsvsheetParser.g4 are the source of truth (SPECIFICATION.md).
-# This Makefile compiles them to each language with ANTLR4, into gen/<lang>/.
-# Lift a generated tree into a new tsvsheet.<lang> implementation repo, or
-# retarget these rules at a sibling repo once one exists (see up.grammar for that
-# model). The Java/ANTLR toolchain is isolated in Docker; generated code is
-# committed in each implementation, so their normal builds stay toolchain-free.
+# This Makefile compiles them with ANTLR4 (the up.grammar model): the org tree is
+# mounted at /work, so `make go` writes the generated Go parser DIRECTLY into the
+# sibling go-tsvsheet/internal/grammar — never hand-copied. Languages without a
+# sibling implementation yet still emit into gen/<lang>/ for a future lift. The
+# Java/ANTLR toolchain is isolated in Docker; generated code is committed in each
+# implementation, so their normal builds stay toolchain-free.
 
 MAKEFILE_DIR := $(patsubst %/,%,$(dir $(realpath $(lastword $(MAKEFILE_LIST)))))
+ORG          := $(realpath $(MAKEFILE_DIR)/..)
 ANTLR_IMAGE  := tsvsheet-antlr
 LEXER        := TsvsheetLexer.g4
 PARSER       := TsvsheetParser.g4
 
-RUN := docker run --rm -v "$(MAKEFILE_DIR)":/work -w /work $(ANTLR_IMAGE)
+# The org tree is mounted at /work so a target can write into a sibling repo.
+RUN := docker run --rm -v "$(ORG)":/work -w /work/tsvsheet $(ANTLR_IMAGE)
 
 .PHONY: help
 help: ## Show this help
@@ -30,9 +33,13 @@ image: docker/antlr/Dockerfile ## Build the pinned ANTLR4 generator image
 gen: go python js java cpp ## Generate every stock-ANTLR target into gen/<lang>/
 
 .PHONY: go
-go: image ## Generate the Go parser into gen/go
-	$(RUN) -Dlanguage=Go -package tsvsheetgrammar -o gen/go $(LEXER)
-	$(RUN) -Dlanguage=Go -visitor -package tsvsheetgrammar -lib gen/go -o gen/go $(PARSER)
+GO_OUT     := /work/go-tsvsheet/internal/grammar
+GO_OUT_ABS := $(ORG)/go-tsvsheet/internal/grammar
+go: image ## Generate the Go parser directly into ../go-tsvsheet/internal/grammar
+	$(RUN) -Dlanguage=Go -package tsvsheetgrammar -o $(GO_OUT) $(LEXER)
+	$(RUN) -Dlanguage=Go -visitor -package tsvsheetgrammar -lib $(GO_OUT) -o $(GO_OUT) $(PARSER)
+	gofmt -w $(GO_OUT_ABS)
+	rm -f $(GO_OUT_ABS)/*.interp $(GO_OUT_ABS)/*.tokens
 
 .PHONY: python
 python: image ## Generate the Python 3 parser into gen/python
